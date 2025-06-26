@@ -1,8 +1,9 @@
 openai
-torch
 PyPDF2
 ollama
 pyyaml
 beautifulsoup4
 lxml
 python-dotenv
+torch==2.2.2+cpu
+torchvision==0.17.2+cpu
