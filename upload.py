@@ -1,124 +1,98 @@
 import os
-import tkinter as tk
-from tkinter import filedialog
 import PyPDF2
 import re
 import json
+import csv
 
-# Function to convert PDF to text and append to vault.txt
-def convert_pdf_to_text():
-    file_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
-    if file_path:
-        with open(file_path, 'rb') as pdf_file:
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
-            num_pages = len(pdf_reader.pages)
-            text = ''
-            for page_num in range(num_pages):
-                page = pdf_reader.pages[page_num]
-                if page.extract_text():
-                    text += page.extract_text() + " "
-            
-            # Normalize whitespace and clean up text
-            text = re.sub(r'\s+', ' ', text).strip()
-            
-            # Split text into chunks by sentences, respecting a maximum chunk size
-            sentences = re.split(r'(?<=[.!?]) +', text)  # split on spaces following sentence-ending punctuation
-            chunks = []
-            current_chunk = ""
-            for sentence in sentences:
-                # Check if the current sentence plus the current chunk exceeds the limit
-                if len(current_chunk) + len(sentence) + 1 < 1000:  # +1 for the space
-                    current_chunk += (sentence + " ").strip()
-                else:
-                    # When the chunk exceeds 1000 characters, store it and start a new one
-                    chunks.append(current_chunk)
-                    current_chunk = sentence + " "
-            if current_chunk:  # Don't forget the last chunk!
-                chunks.append(current_chunk)
-            with open("vault.txt", "a", encoding="utf-8") as vault_file:
-                for chunk in chunks:
-                    # Write each chunk to its own line
-                    vault_file.write(chunk.strip() + "\n")  # Two newlines to separate chunks
-            print(f"PDF content appended to vault.txt with each chunk on a separate line.")
+# Folder where your source files are stored
+SOURCE_DIR = "./data_sources"  # Change this path if needed
+VAULT_FILE = "vault.txt"
 
-# Function to upload a text file and append to vault.txt
-def upload_txtfile():
-    file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
-    if file_path:
-        with open(file_path, 'r', encoding="utf-8") as txt_file:
-            text = txt_file.read()
-            
-            # Normalize whitespace and clean up text
-            text = re.sub(r'\s+', ' ', text).strip()
-            
-            # Split text into chunks by sentences, respecting a maximum chunk size
-            sentences = re.split(r'(?<=[.!?]) +', text)  # split on spaces following sentence-ending punctuation
-            chunks = []
-            current_chunk = ""
-            for sentence in sentences:
-                # Check if the current sentence plus the current chunk exceeds the limit
-                if len(current_chunk) + len(sentence) + 1 < 1000:  # +1 for the space
-                    current_chunk += (sentence + " ").strip()
-                else:
-                    # When the chunk exceeds 1000 characters, store it and start a new one
-                    chunks.append(current_chunk)
-                    current_chunk = sentence + " "
-            if current_chunk:  # Don't forget the last chunk!
-                chunks.append(current_chunk)
-            with open("vault.txt", "a", encoding="utf-8") as vault_file:
-                for chunk in chunks:
-                    # Write each chunk to its own line
-                    vault_file.write(chunk.strip() + "\n")  # Two newlines to separate chunks
-            print(f"Text file content appended to vault.txt with each chunk on a separate line.")
+# Chunking helper
+def chunk_text(text, max_chunk_size=1000):
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    chunks = []
+    current_chunk = ""
+    for sentence in sentences:
+        if len(current_chunk) + len(sentence) + 1 < max_chunk_size:
+            current_chunk += (sentence + " ").strip()
+        else:
+            chunks.append(current_chunk)
+            current_chunk = sentence + " "
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
 
-# Function to upload a JSON file and append to vault.txt
-def upload_jsonfile():
-    file_path = filedialog.askopenfilename(filetypes=[("JSON Files", "*.json")])
-    if file_path:
-        with open(file_path, 'r', encoding="utf-8") as json_file:
-            data = json.load(json_file)
-            
-            # Flatten the JSON data into a single string
-            text = json.dumps(data, ensure_ascii=False)
-            
-            # Normalize whitespace and clean up text
-            text = re.sub(r'\s+', ' ', text).strip()
-            
-            # Split text into chunks by sentences, respecting a maximum chunk size
-            sentences = re.split(r'(?<=[.!?]) +', text)  # split on spaces following sentence-ending punctuation
-            chunks = []
-            current_chunk = ""
-            for sentence in sentences:
-                # Check if the current sentence plus the current chunk exceeds the limit
-                if len(current_chunk) + len(sentence) + 1 < 1000:  # +1 for the space
-                    current_chunk += (sentence + " ").strip()
-                else:
-                    # When the chunk exceeds 1000 characters, store it and start a new one
-                    chunks.append(current_chunk)
-                    current_chunk = sentence + " "
-            if current_chunk:  # Don't forget the last chunk!
-                chunks.append(current_chunk)
-            with open("vault.txt", "a", encoding="utf-8") as vault_file:
-                for chunk in chunks:
-                    # Write each chunk to its own line
-                    vault_file.write(chunk.strip() + "\n")  # Two newlines to separate chunks
-            print(f"JSON file content appended to vault.txt with each chunk on a separate line.")
+# File writing (ensures one line per chunk)
+def write_chunks(chunks):
+    with open(VAULT_FILE, "a", encoding="utf-8") as f:
+        for chunk in chunks:
+            cleaned = chunk.replace('\n', ' ').replace('\r', ' ').strip()
+            f.write(cleaned + "\n")
+    print(f"✅ Appended {len(chunks)} chunks to {VAULT_FILE}")
 
-# Create the main window
-root = tk.Tk()
-root.title("Upload .pdf, .txt, or .json")
+# PDF processing
+def process_pdf(file_path):
+    print(f"Processing PDF: {file_path}")
+    text = ""
+    with open(file_path, 'rb') as f:
+        reader = PyPDF2.PdfReader(f)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + " "
+    text = re.sub(r'\s+', ' ', text).strip()
+    write_chunks(chunk_text(text))
 
-# Create a button to open the file dialog for PDF
-pdf_button = tk.Button(root, text="Upload PDF", command=convert_pdf_to_text)
-pdf_button.pack(pady=10)
+# TXT processing
+def process_txt(file_path):
+    print(f"Processing TXT: {file_path}")
+    with open(file_path, 'r', encoding="utf-8") as f:
+        text = re.sub(r'\s+', ' ', f.read()).strip()
+    write_chunks(chunk_text(text))
 
-# Create a button to open the file dialog for text file
-txt_button = tk.Button(root, text="Upload Text File", command=upload_txtfile)
-txt_button.pack(pady=10)
+# JSON processing
+def process_json(file_path):
+    print(f"Processing JSON: {file_path}")
+    with open(file_path, 'r', encoding="utf-8") as f:
+        data = json.load(f)
+        text = json.dumps(data, ensure_ascii=False)
+        text = re.sub(r'\s+', ' ', text).strip()
+    write_chunks(chunk_text(text))
 
-# Create a button to open the file dialog for JSON file
-json_button = tk.Button(root, text="Upload JSON File", command=upload_jsonfile)
-json_button.pack(pady=10)
+# CSV processing with text + link columns
+def process_csv(file_path):
+    print(f"Processing CSV: {file_path}")
+    chunks = []
+    with open(file_path, 'r', encoding="utf-8") as f:
+        reader = csv.reader(f, delimiter=",", quotechar='"')
+        for row_num, row in enumerate(reader):
+            if len(row) < 2:
+                print(f"Skipping malformed row {row_num}: {row}")
+                continue
+            text = row[0].strip()
+            link = row[1].strip()
+            if text and link:
+                full_text = f"{text} [Source: {link}]"
+                chunks += chunk_text(full_text)
+    write_chunks(chunks)
 
-# Run the main event loop
-root.mainloop()
+# Dispatcher for folder files
+def process_directory(directory):
+    for file in os.listdir(directory):
+        full_path = os.path.join(directory, file)
+        if file.lower().endswith('.pdf'):
+            process_pdf(full_path)
+        elif file.lower().endswith('.txt'):
+            process_txt(full_path)
+        elif file.lower().endswith('.json'):
+            process_json(full_path)
+        elif file.lower().endswith('.csv'):
+            process_csv(full_path)
+
+# Entry point
+if __name__ == "__main__":
+    if not os.path.exists(SOURCE_DIR):
+        print(f"❌ Source directory '{SOURCE_DIR}' does not exist.")
+    else:
+        process_directory(SOURCE_DIR)
